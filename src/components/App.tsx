@@ -774,7 +774,8 @@ const App: React.FC = () => {
     prevResources.current = { energy: gameState.energy, knowledge: gameState.knowledge };
   }, [gameState.energy, gameState.knowledge]);
 
-  const { transform, handleWheel, handleMouseDown, handleMouseUp, handleMouseMove, screenToWorld: rawScreenToWorld, zoom, isPanningRef } = useWorldScale(0.4);
+  // Use the new Camera Director enabled useWorldScale
+  const { transform, handleWheel, handleMouseDown, handleMouseUp, handleMouseMove, screenToWorld: rawScreenToWorld, zoom, isPanningRef, setCameraTarget } = useWorldScale(1.5);
   const screenToWorld = useCallback((x: number, y: number) => rawScreenToWorld(x, y, dimensions), [rawScreenToWorld, dimensions]);
 
   useGameLoop(dispatch, dimensions, gameState.isPaused, transform);
@@ -819,50 +820,59 @@ const App: React.FC = () => {
           worldScaleHandlers={{handleWheel, handleMouseDown, handleMouseUp, handleMouseMove}}
           screenToWorld={screenToWorld}
           isPanningRef={isPanningRef}
+          setCameraTarget={setCameraTarget} // Pass the camera director function
         />
       </div>
       
-      {/* --- HUD --- */}
-      <div className="hud-container absolute inset-0 pointer-events-none z-20 flex flex-col justify-between p-4">
+      {/* --- HOLOGRAPHIC HUD --- */}
+      <div className="hud-container absolute inset-0 pointer-events-none z-20 flex flex-col justify-between p-6">
           
-          {/* Top Status Bar */}
+          {/* Top Bar */}
           <div className="flex justify-between items-start w-full">
-              {/* Left: Resources */}
+              {/* Resources */}
               <div className="flex gap-4 pointer-events-auto">
-                  <div className={`hud-resource-pill glass-panel ${energyPulse ? 'border-yellow-400' : 'border-white/10'}`}>
-                      <span className="text-yellow-400 font-bold text-lg drop-shadow-[0_0_5px_rgba(250,204,21,0.5)]">⚡</span>
-                      <span className="font-mono text-lg tracking-wider">{Math.floor(gameState.energy).toLocaleString()}</span>
+                  <div className={`hud-panel ${energyPulse ? 'border-yellow-400' : ''}`}>
+                      <div className="text-[10px] text-gray-400 tracking-widest uppercase mb-1">Energy</div>
+                      <div className="flex items-baseline gap-2">
+                          <span className="text-yellow-400 text-xl">⚡</span>
+                          <span className="hud-value text-white">{Math.floor(gameState.energy).toLocaleString()}</span>
+                      </div>
                   </div>
-                  <div className={`hud-resource-pill glass-panel ${knowledgePulse ? 'border-purple-400' : 'border-white/10'}`}>
-                      <span className="text-purple-400 font-bold text-lg drop-shadow-[0_0_5px_rgba(192,132,252,0.5)]">◈</span>
-                      <span className="font-mono text-lg tracking-wider">{Math.floor(gameState.knowledge).toLocaleString()}</span>
+                  <div className={`hud-panel ${knowledgePulse ? 'border-purple-400' : ''}`}>
+                      <div className="text-[10px] text-gray-400 tracking-widest uppercase mb-1">Knowledge</div>
+                      <div className="flex items-baseline gap-2">
+                          <span className="text-purple-400 text-xl">◈</span>
+                          <span className="hud-value text-white">{Math.floor(gameState.knowledge).toLocaleString()}</span>
+                      </div>
                   </div>
-                  <div className="hud-resource-pill glass-panel border-white/10">
-                      <span className="text-green-400 font-bold text-lg drop-shadow-[0_0_5px_rgba(74,222,128,0.5)]">🌱</span>
-                      <span className="font-mono text-lg tracking-wider">{Math.floor(gameState.biomass).toLocaleString()}</span>
-                  </div>
-              </div>
-
-              {/* Center: Objective & Karma */}
-              <div className="flex flex-col items-center glass-panel px-8 py-2 pointer-events-auto bg-black/40 backdrop-blur-md rounded-b-2xl border-t-0">
-                  <div className="text-xs text-cyan-400 uppercase tracking-[0.2em] font-bold mb-1">{chapterInfo.name}</div>
-                  <div className="w-64 h-1.5 bg-gray-800 rounded-full overflow-hidden mb-1">
-                      <div className="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500" style={{ width: `${chapterProgress}%` }}></div>
-                  </div>
-                  <div className="text-[10px] text-gray-400 font-mono">{chapterInfo.objective}</div>
-                  
-                  {/* Minimalist Karma Bar */}
-                  <div className="w-64 h-1 mt-2 bg-white/10 rounded-full relative overflow-hidden">
-                      <div className="absolute top-0 bottom-0 left-0 bg-red-500 w-1/2 opacity-20"></div>
-                      <div className="absolute top-0 bottom-0 right-0 bg-cyan-500 w-1/2 opacity-20"></div>
-                      <div className="absolute top-0 bottom-0 w-20 bg-white/80 blur-[2px]" style={{ left: karmaIndicatorPosition, transform: 'translateX(-50%)', transition: 'left 0.5s ease' }}></div>
+                  <div className="hud-panel">
+                      <div className="text-[10px] text-gray-400 tracking-widest uppercase mb-1">Biomass</div>
+                      <div className="flex items-baseline gap-2">
+                          <span className="text-green-400 text-xl">🌱</span>
+                          <span className="hud-value text-white">{Math.floor(gameState.biomass).toLocaleString()}</span>
+                      </div>
                   </div>
               </div>
 
-              {/* Right: Menu */}
+              {/* Center Objective */}
+              <div className="flex flex-col items-center pointer-events-auto mt-2">
+                  <div className="hud-panel px-12 py-4 transform skew-x-[-10deg] border-t-0 border-b-2 bg-black/60">
+                      <div className="transform skew-x-[10deg] text-center">
+                          <div className="text-xs text-cyan-400 uppercase tracking-[0.3em] font-bold mb-1">{chapterInfo.name}</div>
+                          <div className="text-sm text-yellow-200 font-mono tracking-wide">{chapterInfo.objective}</div>
+                          
+                          {/* Tech Progress Bar */}
+                          <div className="w-full h-1 bg-gray-800 mt-2 relative overflow-hidden">
+                              <div className="absolute top-0 left-0 h-full bg-cyan-400 shadow-[0_0_10px_cyan]" style={{ width: `${chapterProgress}%` }}></div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+
+              {/* Right Menu */}
               <div className="flex flex-col items-end gap-2 pointer-events-auto">
-                  <button onClick={() => setSettingsModalOpen(true)} className="p-3 rounded-full glass-panel hover:bg-white/10 transition-colors group">
-                      <svg className="w-6 h-6 text-gray-400 group-hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                  <button onClick={() => setSettingsModalOpen(true)} className="neon-button p-3 aspect-square group">
+                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
                   </button>
                   {gameState.notifications.map((msg, index) => (
                     <Notification key={`${msg}-${index}`} message={msg} onDismiss={() => dispatch({ type: 'DISMISS_NOTIFICATION', payload: { index } })} />
@@ -870,34 +880,37 @@ const App: React.FC = () => {
               </div>
           </div>
 
-          {/* Bottom Command Dock */}
-          <div className="flex justify-between items-end w-full pb-4">
-              {/* Inventory */}
-              <div className="flex gap-2 pointer-events-auto">
+          {/* Bottom Dock */}
+          <div className="flex justify-between items-end w-full">
+              {/* Inventory Grid */}
+              <div className="grid grid-cols-4 gap-2 pointer-events-auto">
                   {gameState.inventory.map(item => (
                     <button
                       key={item.id}
-                      className="w-14 h-14 rounded-xl glass-panel flex items-center justify-center hover:border-cyan-400/50 hover:bg-cyan-900/20 transition-all active:scale-95"
+                      className="w-16 h-16 bg-black/40 border border-cyan-900 hover:border-cyan-400 flex items-center justify-center transition-all active:scale-95 relative group"
                       onClick={() => dispatch({ type: 'USE_ITEM', payload: { itemId: item.id }})}
                       title={item.name}
                     >
-                        <div className={`w-8 h-8 icon-${item.icon} bg-contain opacity-80`}></div>
+                        <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-cyan-500"></div>
+                        <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-cyan-500"></div>
+                        <div className={`w-8 h-8 icon-${item.icon} bg-contain opacity-80 group-hover:opacity-100`}></div>
                     </button>
                   ))}
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-6 pointer-events-auto">
-                  <div className="flex flex-col gap-2">
-                      <button onClick={() => zoom(1.2)} className="w-10 h-10 rounded-full glass-panel flex items-center justify-center text-cyan-300 hover:text-white transition-colors text-xl bg-black/40">+</button>
-                      <button onClick={() => zoom(1/1.2)} className="w-10 h-10 rounded-full glass-panel flex items-center justify-center text-cyan-300 hover:text-white transition-colors text-xl bg-black/40">-</button>
+              {/* Main Actions */}
+              <div className="flex items-end gap-6 pointer-events-auto">
+                   <div className="flex flex-col gap-2 mr-4">
+                      <button onClick={() => zoom(1.2)} className="neon-button w-10 h-10 flex items-center justify-center text-xl">+</button>
+                      <button onClick={() => zoom(1/1.2)} className="neon-button w-10 h-10 flex items-center justify-center text-xl">-</button>
                   </div>
-                  
+
                   <button 
                     onClick={() => setUpgradeModalOpen(true)} 
-                    className="neon-button primary w-20 h-20 rounded-full flex items-center justify-center text-3xl shadow-[0_0_30px_rgba(0,243,255,0.2)]"
+                    className="neon-button w-24 h-24 flex flex-col items-center justify-center gap-2 bg-black/60"
                   >
-                    <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+                    <span className="text-[10px] tracking-widest">UPGRADE</span>
                   </button>
               </div>
           </div>
