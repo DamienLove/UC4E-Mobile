@@ -25,8 +25,8 @@ const handleApiError = async (error: any) => {
     }
 };
 
-const MAX_RETRIES = 5;
-const INITIAL_BACKOFF_MS = 5000;
+const MAX_RETRIES = 6;
+const INITIAL_BACKOFF_MS = 10000; // Start with 10 seconds
 
 // Generic retry wrapper
 async function retryWithBackoff<T>(operation: () => Promise<T>, fallbackValue: T | null = null): Promise<T | null> {
@@ -44,8 +44,17 @@ async function retryWithBackoff<T>(operation: () => Promise<T>, fallbackValue: T
                     console.warn(`Max retries reached for operation. Error: ${errorMessage}`);
                     break;
                 }
-                const delay = INITIAL_BACKOFF_MS * Math.pow(2, retries - 1);
-                console.warn(`Quota hit (429). Retrying in ${delay/1000}s...`);
+                
+                // Try to extract specific retry delay from error message (e.g., "Please retry in 56.200s")
+                let delay = INITIAL_BACKOFF_MS * Math.pow(2, retries - 1);
+                const match = errorMessage.match(/retry in ([0-9.]+)s/);
+                if (match && match[1]) {
+                    const recommendedDelay = parseFloat(match[1]) * 1000;
+                    // Add a small buffer to the recommended delay
+                    delay = Math.max(delay, recommendedDelay + 2000); 
+                }
+
+                console.warn(`Quota hit (429). Retrying in ${Math.round(delay/1000)}s...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
             } else {
                 await handleApiError(error);
