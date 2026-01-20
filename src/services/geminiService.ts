@@ -37,7 +37,8 @@ async function retryWithBackoff<T>(operation: () => Promise<T>, fallbackValue: T
         } catch (error: any) {
             const errorMessage = (error.toString() || '').toLowerCase();
             const isRateLimit = errorMessage.includes('429') || errorMessage.includes('resource_exhausted');
-            
+            const isPermission = errorMessage.includes('403') || errorMessage.includes('permission_denied') || errorMessage.includes('requested entity was not found');
+
             if (isRateLimit) {
                 retries++;
                 if (retries >= MAX_RETRIES) {
@@ -56,8 +57,14 @@ async function retryWithBackoff<T>(operation: () => Promise<T>, fallbackValue: T
 
                 console.warn(`Quota hit (429). Retrying in ${Math.round(delay/1000)}s...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
-            } else {
+            } else if (isPermission) {
+                console.warn("Permission/Auth error (403/404). Prompting for key update and retrying...");
                 await handleApiError(error);
+                // Retry immediately after key selection dialog closes.
+                // We increment retries to prevent infinite loops if the user keeps selecting invalid keys.
+                retries++; 
+                if (retries >= MAX_RETRIES) break;
+            } else {
                 console.error("Gemini API Error:", error);
                 return fallbackValue;
             }
@@ -67,10 +74,10 @@ async function retryWithBackoff<T>(operation: () => Promise<T>, fallbackValue: T
 }
 
 export const getGeminiFlavorText = async (concept: string): Promise<string> => {
-  const ai = getAiClient();
-  if (!ai) return '"The archives are silent on this matter..."';
-
   return (await retryWithBackoff(async () => {
+    const ai = getAiClient();
+    if (!ai) return '"The archives are silent on this matter..."';
+
     const prompt = `Create a short, poetic, and evocative flavor text for a concept in a cosmic evolution game. The concept is "${concept.replace(/_/g, ' ')}". The text should be a single sentence, enclosed in double quotes, and feel profound, like a line from a science fiction novel.`;
 
     const response = await ai.models.generateContent({
@@ -94,10 +101,10 @@ export const getGeminiFlavorText = async (concept: string): Promise<string> => {
 
 
 export const getGeminiLoreForNode = async (node: GameNode, chapter: Chapter): Promise<string> => {
-    const ai = getAiClient();
-    if (!ai) return "The connection is weak... The future is clouded.";
-
     return (await retryWithBackoff(async () => {
+        const ai = getAiClient();
+        if (!ai) return "The connection is weak... The future is clouded.";
+
         const nodeDescription = `${node.label} (${node.type.replace(/_/g, ' ')})`;
         const prompt = `You are the Universal Consciousness. A player is observing: ${nodeDescription}. Chapter: "${chapter.name}". Provide a short (under 50 words), profound, and slightly cryptic observation about this object's deeper role in the cosmos.`;
 
@@ -118,10 +125,10 @@ export const getGeminiLoreForNode = async (node: GameNode, chapter: Chapter): Pr
 };
 
 export const generateNodeImage = async (prompt: string): Promise<string | null> => {
-    const ai = getAiClient();
-    if (!ai) return null;
-    
     return retryWithBackoff(async () => {
+        const ai = getAiClient();
+        if (!ai) return null;
+
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',
             contents: {
@@ -145,11 +152,13 @@ export const generateNodeImage = async (prompt: string): Promise<string | null> 
 };
 
 export const generateMilestoneVideo = async (prompt: string): Promise<string | null> => {
-  const ai = getAiClient();
-  const apiKey = process.env.API_KEY; // Needed for the URL suffix
-  if (!ai || !apiKey) return null;
+  // Key is needed outside for URL construction, but also re-fetched inside for client creation
+  const apiKey = process.env.API_KEY; 
   
   return retryWithBackoff(async () => {
+    const ai = getAiClient();
+    if (!ai || !apiKey) return null;
+
     let operation = await ai.models.generateVideos({
       model: 'veo-3.1-fast-generate-preview',
       prompt: `Cinematic, photorealistic video of: ${prompt}. Slow motion, epic lighting, 4k resolution feel.`,

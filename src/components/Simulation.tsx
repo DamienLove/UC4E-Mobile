@@ -17,7 +17,7 @@ interface SimulationProps {
   };
   screenToWorld: (screenX: number, screenY: number) => { x: number; y: number };
   isPanningRef: React.MutableRefObject<boolean>;
-  setCameraTarget?: (x: number, y: number, scale: number) => void; // New prop
+  setCameraTarget?: (x: number, y: number, scale: number) => void; 
 }
 
 const PLAYER_HUNT_RANGE = 150;
@@ -29,47 +29,57 @@ const Simulation: React.FC<SimulationProps> = ({
   const { width, height } = dimensions;
   const playerNode = gameState.nodes.find(n => n.type === 'player_consciousness');
 
-  // --- CAMERA DIRECTOR LOGIC ---
+  // --- INTELLIGENT CAMERA DIRECTOR ---
   useEffect(() => {
       if (!setCameraTarget || !playerNode) return;
 
       const state = gameState.projection.playerState;
       let targetScale = 1.0;
-      let targetX = -playerNode.x * targetScale;
-      let targetY = -playerNode.y * targetScale;
+      
+      // Default to player position
+      let focusX = playerNode.x;
+      let focusY = playerNode.y;
 
-      // Dynamic Zoom based on gameplay state
       if (state === 'AIMING_DIRECTION') {
-          // Zoom out to see the battlefield
-          targetScale = 0.7;
-          targetX = -playerNode.x * targetScale;
-          targetY = -playerNode.y * targetScale;
+          targetScale = 0.75;
+          // Look between player and target
+          if (gameState.aimAssistTargetId) {
+              const target = gameState.nodes.find(n => n.id === gameState.aimAssistTargetId);
+              if (target) {
+                  focusX = (playerNode.x + target.x) / 2;
+                  focusY = (playerNode.y + target.y) / 2;
+              }
+          } else {
+              // If free aiming, look slightly ahead in the aim direction
+              const lookAheadDist = 200;
+              focusX = playerNode.x + Math.cos(gameState.projection.aimAngle) * lookAheadDist * 0.5;
+              focusY = playerNode.y + Math.sin(gameState.projection.aimAngle) * lookAheadDist * 0.5;
+          }
       } else if (state === 'AIMING_POWER') {
-          // Tight focus on player for power timing
-          targetScale = 1.8;
-          targetX = -playerNode.x * targetScale;
-          targetY = -playerNode.y * targetScale;
+          // Tight focus on player for precision
+          targetScale = 1.6;
+          focusX = playerNode.x;
+          focusY = playerNode.y;
       } else if (state === 'PROJECTING') {
           // Speed-based Zoom
           const speed = Math.hypot(playerNode.vx, playerNode.vy);
-          targetScale = Math.max(0.6, 1.2 - (speed / 30)); // Faster = Zoom out more
+          targetScale = Math.max(0.6, 1.2 - (speed / 40)); 
           
-          // Look Ahead: Pan slightly in front of the player
-          const lookAheadX = playerNode.vx * 15;
-          const lookAheadY = playerNode.vy * 15;
-          
-          targetX = -(playerNode.x + lookAheadX) * targetScale;
-          targetY = -(playerNode.y + lookAheadY) * targetScale;
+          // Lead the camera: Look ahead of the player based on velocity
+          const leadFactor = 12;
+          focusX = playerNode.x + playerNode.vx * leadFactor;
+          focusY = playerNode.y + playerNode.vy * leadFactor;
       } else {
-          // Idle state
+          // Idle state - detailed view
           targetScale = 1.2;
-          targetX = -playerNode.x * targetScale;
-          targetY = -playerNode.y * targetScale;
+          focusX = playerNode.x;
+          focusY = playerNode.y;
       }
       
-      setCameraTarget(targetX, targetY, targetScale);
+      // Apply the calculated camera transform (inverted because moving the world, not the camera)
+      setCameraTarget(-focusX * targetScale, -focusY * targetScale, targetScale);
 
-  }, [gameState.projection.playerState, playerNode?.x, playerNode?.y, playerNode?.vx, playerNode?.vy, setCameraTarget]);
+  }, [gameState.projection.playerState, gameState.projection.aimAngle, gameState.aimAssistTargetId, playerNode?.x, playerNode?.y, playerNode?.vx, playerNode?.vy, setCameraTarget]);
 
 
   const handleNodeClick = (nodeId: string) => {
@@ -128,6 +138,11 @@ const Simulation: React.FC<SimulationProps> = ({
       onClick={handleContainerClick}
       style={{ cursor: isPanningRef.current ? 'grabbing' : 'crosshair' }}
     >
+      <div className="visor-overlay">
+          <div className="vignette" />
+          <div className="scanlines" />
+      </div>
+
       <div
         className={`world-container ${isZoomingOut ? 'level-zoom-out' : ''}`}
         style={{
@@ -175,7 +190,9 @@ const Simulation: React.FC<SimulationProps> = ({
                 left: wave.x, top: wave.y,
                 width: wave.maxRadius * 2, height: wave.maxRadius * 2,
                 opacity: 1 - wave.life,
-                transform: `translate(-50%, -50%) scale(${wave.life})`
+                transform: `translate(-50%, -50%) scale(${wave.life})`,
+                borderColor: wave.color || 'white',
+                background: wave.color ? `radial-gradient(circle, transparent 70%, ${wave.color}22)` : undefined
             }} />
         ))}
 
@@ -245,8 +262,38 @@ const Simulation: React.FC<SimulationProps> = ({
                     }} />
                 );
             }
+            if (effect.type === 'assimilation') {
+                return (
+                    <div key={effect.id} className="collection-bloom" style={{
+                        left: effect.x, top: effect.y,
+                        width: `${30 * (effect.scale || 1)}px`, height: `${30 * (effect.scale || 1)}px`,
+                        opacity: effect.life / 30,
+                        backgroundColor: '#67e8f9'
+                    }} />
+                );
+            }
             return null;
         })}
+
+        {/* Comets */}
+        {gameState.comets.map(comet => (
+            <React.Fragment key={comet.id}>
+                {/* Comet Tail Segments */}
+                {comet.tailHistory.map((pos, i) => (
+                    <div key={`${comet.id}_tail_${i}`} className="comet-tail-segment" style={{
+                        left: pos.x, top: pos.y,
+                        width: `${comet.radius * (1 - i/20)}px`, 
+                        height: `${comet.radius * (1 - i/20)}px`,
+                        opacity: 0.5 - (i * 0.02)
+                    }} />
+                ))}
+                {/* Comet Body */}
+                <div className="comet-body" style={{
+                    left: comet.x, top: comet.y,
+                    width: `${comet.radius * 2}px`, height: `${comet.radius * 2}px`
+                }} />
+            </React.Fragment>
+        ))}
 
         {/* Cosmic Events (Supernova, etc) - Keep existing structure */}
         {gameState.cosmicEvents.map(event => {
@@ -301,7 +348,13 @@ const Simulation: React.FC<SimulationProps> = ({
                 node.id === gameState.aimAssistTargetId ? 'aim-assist-target' : '',
                 node.type,
                 node.id === gameState.selectedNodeId ? 'selected' : '',
+                node.frozenTimer && node.frozenTimer > 0 ? 'node-frozen' : ''
             ].join(' ');
+            
+            // Player charging state
+            if (isPlayer && gameState.projection.playerState === 'AIMING_POWER') {
+                // Add charging class if needed
+            }
             
             return (
                 <div
@@ -312,7 +365,7 @@ const Simulation: React.FC<SimulationProps> = ({
                         if (isPlayer) handlePlayerInteraction(e);
                         else handleNodeClick(node.id);
                     }}
-                    className={`node-container ${otherClasses} ${warpingClassName}`}
+                    className={`node-container ${otherClasses} ${warpingClassName} ${isPlayer && gameState.projection.playerState === 'AIMING_POWER' ? 'player-charging' : ''}`}
                     style={{
                         left: `${node.x}px`, top: `${node.y}px`,
                         width: `${node.radius * 2}px`, height: `${node.radius * 2}px`,

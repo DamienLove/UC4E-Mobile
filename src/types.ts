@@ -28,10 +28,11 @@ export interface VisualEffect {
     id: string;
     x: number;
     y: number;
-    type: 'flare' | 'spark';
+    type: 'flare' | 'spark' | 'ice-shatter' | 'assimilation';
     life: number;
     angle?: number;
     scale?: number;
+    color?: string; // Optional override
 }
 
 export interface GameNode {
@@ -52,6 +53,10 @@ export interface GameNode {
   maxIntegrity: number;
   currentIntegrity: number;
   integrityCooldown: number; // If > 0, node is recovering/invulnerable
+  hitCount?: number; // Track hits for progression logic
+  
+  // Status Effects
+  frozenTimer?: number; // > 0 means frozen/iced
 
   tunnelingState?: {
     phase: 'out' | 'in';
@@ -59,6 +64,16 @@ export interface GameNode {
     targetX: number;
     targetY: number;
   } | null;
+}
+
+export interface Comet {
+    id: string;
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    radius: number;
+    tailHistory: {x: number, y: number}[]; // Store previous positions for tail rendering
 }
 
 // New Interface for captured planets
@@ -159,6 +174,7 @@ export interface Shockwave {
     y: number;
     maxRadius: number;
     life: number; // 0 to 1 progress
+    color?: string; // Optional color override
 }
 
 export interface CosmicEvent {
@@ -211,6 +227,7 @@ export interface GameState {
   nodes: GameNode[];
   satellites: Satellite[]; // New: Captured nodes
   spaceDust: SpaceDust[]; // New: Small hittables
+  comets: Comet[]; // New: Hazards
   phages: QuantumPhage[];
   cosmicEvents: CosmicEvent[];
 
