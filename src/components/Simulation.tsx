@@ -262,16 +262,6 @@ const Simulation: React.FC<SimulationProps> = ({
                     }} />
                 );
             }
-            if (effect.type === 'assimilation') {
-                return (
-                    <div key={effect.id} className="collection-bloom" style={{
-                        left: effect.x, top: effect.y,
-                        width: `${30 * (effect.scale || 1)}px`, height: `${30 * (effect.scale || 1)}px`,
-                        opacity: effect.life / 30,
-                        backgroundColor: '#67e8f9'
-                    }} />
-                );
-            }
             return null;
         })}
 
@@ -351,10 +341,8 @@ const Simulation: React.FC<SimulationProps> = ({
                 node.frozenTimer && node.frozenTimer > 0 ? 'node-frozen' : ''
             ].join(' ');
             
-            // Player charging state
-            if (isPlayer && gameState.projection.playerState === 'AIMING_POWER') {
-                // Add charging class if needed
-            }
+            // Render progress bar for interactable nodes (Stars and Planets), excluding Asteroids and Player
+            const showProgressBar = !isPlayer && node.type !== 'asteroid' && node.maxIntegrity > 0;
             
             return (
                 <div
@@ -373,6 +361,14 @@ const Simulation: React.FC<SimulationProps> = ({
                         zIndex: isPlayer ? 100 : 1,
                     } as React.CSSProperties}
                 >
+                 {showProgressBar && (
+                     <div className="node-progress-bar">
+                         <div 
+                            className="node-progress-fill" 
+                            style={{ width: `${(node.currentIntegrity / node.maxIntegrity) * 100}%` }}
+                         />
+                     </div>
+                 )}
                  {isPlayer ? (
                      <div className="player-core-container">
                          <div className="player-core" />

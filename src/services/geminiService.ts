@@ -25,8 +25,8 @@ const handleApiError = async (error: any) => {
     }
 };
 
-const MAX_RETRIES = 6;
-const INITIAL_BACKOFF_MS = 10000; // Start with 10 seconds
+const MAX_RETRIES = 3; // Reduced to avoid long waits
+const INITIAL_BACKOFF_MS = 2000;
 
 // Generic retry wrapper
 async function retryWithBackoff<T>(operation: () => Promise<T>, fallbackValue: T | null = null): Promise<T | null> {
@@ -41,27 +41,17 @@ async function retryWithBackoff<T>(operation: () => Promise<T>, fallbackValue: T
 
             if (isRateLimit) {
                 retries++;
-                if (retries >= MAX_RETRIES) {
-                    console.warn(`Max retries reached for operation. Error: ${errorMessage}`);
-                    break;
-                }
+                if (retries >= MAX_RETRIES) break;
                 
-                // Try to extract specific retry delay from error message (e.g., "Please retry in 56.200s")
                 let delay = INITIAL_BACKOFF_MS * Math.pow(2, retries - 1);
                 const match = errorMessage.match(/retry in ([0-9.]+)s/);
                 if (match && match[1]) {
-                    const recommendedDelay = parseFloat(match[1]) * 1000;
-                    // Add a small buffer to the recommended delay
-                    delay = Math.max(delay, recommendedDelay + 2000); 
+                    delay = Math.max(delay, parseFloat(match[1]) * 1000 + 1000); 
                 }
-
-                console.warn(`Quota hit (429). Retrying in ${Math.round(delay/1000)}s...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
             } else if (isPermission) {
-                console.warn("Permission/Auth error (403/404). Prompting for key update and retrying...");
+                console.warn("Permission/Auth error (403/404). Prompting for key update...");
                 await handleApiError(error);
-                // Retry immediately after key selection dialog closes.
-                // We increment retries to prevent infinite loops if the user keeps selecting invalid keys.
                 retries++; 
                 if (retries >= MAX_RETRIES) break;
             } else {
@@ -108,15 +98,13 @@ export const getGeminiLoreForNode = async (node: GameNode, chapter: Chapter): Pr
         const nodeDescription = `${node.label} (${node.type.replace(/_/g, ' ')})`;
         const prompt = `You are the Universal Consciousness. A player is observing: ${nodeDescription}. Chapter: "${chapter.name}". Provide a short (under 50 words), profound, and slightly cryptic observation about this object's deeper role in the cosmos.`;
 
-        // Using gemini-3-pro-preview with thinking mode for complex creative reasoning
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-preview',
             contents: prompt,
             config: {
-                thinkingConfig: { thinkingBudget: 32768 },
+                thinkingConfig: { thinkingBudget: 1024 }, // Reduced thinking budget for faster response
                 systemInstruction: "You are the narrator of a profound cosmic simulation game, speaking with wisdom and a touch of mystery.",
                 temperature: 0.9,
-                // maxOutputTokens must not be set when using thinkingConfig
             }
         });
         
@@ -129,30 +117,55 @@ export const generateNodeImage = async (prompt: string): Promise<string | null> 
         const ai = getAiClient();
         if (!ai) return null;
 
-        const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-image-preview',
-            contents: {
-                parts: [{ text: prompt }]
-            },
-            config: {
-                imageConfig: {
-                    aspectRatio: "1:1",
-                    imageSize: "1K"
-                }
-            },
-        });
+        try {
+            // Attempt with the high-quality model first
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-pro-image-preview',
+                contents: {
+                    parts: [{ text: prompt }]
+                },
+                config: {
+                    imageConfig: {
+                        aspectRatio: "1:1",
+                        imageSize: "1K"
+                    }
+                },
+            });
 
-        for (const part of response.candidates?.[0]?.content?.parts || []) {
-            if (part.inlineData) {
-                return `data:image/png;base64,${part.inlineData.data}`;
+            for (const part of response.candidates?.[0]?.content?.parts || []) {
+                if (part.inlineData) {
+                    return `data:image/png;base64,${part.inlineData.data}`;
+                }
             }
+        } catch (error: any) {
+            const msg = (error.toString() || '').toLowerCase();
+            // If permission denied or model not found, fallback to Flash Image
+            if (msg.includes('403') || msg.includes('permission_denied') || msg.includes('404')) {
+                console.warn("Gemini 3 Pro Image unavailable. Falling back to Gemini 2.5 Flash Image.");
+                const fallbackResponse = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash-image',
+                    contents: {
+                        parts: [{ text: prompt }]
+                    },
+                    config: {
+                        imageConfig: {
+                            aspectRatio: "1:1"
+                        }
+                    },
+                });
+                for (const part of fallbackResponse.candidates?.[0]?.content?.parts || []) {
+                    if (part.inlineData) {
+                        return `data:image/png;base64,${part.inlineData.data}`;
+                    }
+                }
+            }
+            throw error; // Re-throw to let retryWithBackoff handle other error types (e.g. rate limits)
         }
         return null;
     });
 };
 
 export const generateMilestoneVideo = async (prompt: string): Promise<string | null> => {
-  // Key is needed outside for URL construction, but also re-fetched inside for client creation
   const apiKey = process.env.API_KEY; 
   
   return retryWithBackoff(async () => {

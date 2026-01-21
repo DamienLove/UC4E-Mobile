@@ -31,7 +31,7 @@ export const UPGRADES: Upgrade[] = [
     id: 'basic_physics',
     title: 'Basic Physics',
     description: 'Understand the fundamental forces of the universe.',
-    cost: { knowledge: 5 }, // Reduced from 10
+    cost: { knowledge: 10 },
     chapter: 0,
     effect: (gs) => ({ ...gs, complexity: gs.complexity + 5 }),
     animationId: 'basic_physics',
@@ -39,8 +39,8 @@ export const UPGRADES: Upgrade[] = [
   {
     id: 'star_formation',
     title: 'Star Formation',
-    description: 'Ignite the first stars, turning hydrogen into light and heat.',
-    cost: { energy: 25, knowledge: 10 }, // Reduced from 50/20
+    description: 'Ignite the first stars to complete your objective. Turns hydrogen into light and heat.',
+    cost: { energy: 50, knowledge: 20 },
     prerequisites: ['basic_physics'],
     chapter: 0,
     generatesNodeType: 'star',
@@ -68,7 +68,7 @@ export const UPGRADES: Upgrade[] = [
     id: 'planetary_accretion',
     title: 'Planetary Accretion',
     description: 'Coalesce cosmic dust and rock into planetary bodies.',
-    cost: { energy: 100, complexity: 5 }, // Reduced from 200/10
+    cost: { energy: 200, complexity: 10 },
     prerequisites: ['star_formation'],
     chapter: 1,
     generatesNodeType: 'rocky_planet',
@@ -98,7 +98,7 @@ export const UPGRADES: Upgrade[] = [
     id: 'spark_of_life',
     title: 'Spark of Life',
     description: 'Catalyze the chemical reactions needed for life to emerge in primordial oceans.',
-    cost: { energy: 300, knowledge: 50 }, // Reduced
+    cost: { energy: 500, knowledge: 100 },
     prerequisites: ['planetary_accretion'],
     chapter: 2,
     modifiesNodeTypeTarget: 'life_seed',
@@ -114,14 +114,14 @@ export const UPGRADES: Upgrade[] = [
         target.type = 'life_seed';
         target.imageUrl = imageUrl || getRandomImage('life_seed');
       }
-      return { ...gs, biomass: gs.biomass + 50, karma: gs.karma + 15 };
+      return { ...gs, biomass: gs.biomass + 10, karma: gs.karma + 10 };
     },
   },
   {
     id: 'panspermia',
     title: 'Panspermia',
     description: 'Life is a traveler. Guide extremophilic microbes across the void to seed new worlds.',
-    cost: { energy: 200, knowledge: 75 }, // Reduced
+    cost: { energy: 300, knowledge: 150 },
     prerequisites: ['planetary_accretion'],
     chapter: 2,
     modifiesNodeTypeTarget: 'life_seed',
@@ -137,7 +137,7 @@ export const UPGRADES: Upgrade[] = [
         target.type = 'life_seed';
         target.imageUrl = imageUrl || getRandomImage('life_seed');
       }
-      return { ...gs, biomass: gs.biomass + 50, karma: gs.karma - 15 };
+      return { ...gs, biomass: gs.biomass + 10, karma: gs.karma - 10 };
     },
   },
   // CHAPTER 3: Ascent of Consciousness
@@ -145,7 +145,7 @@ export const UPGRADES: Upgrade[] = [
     id: 'eukaryotic_evolution',
     title: 'Eukaryotic Evolution',
     description: 'Foster symbiotic relationships that lead to complex cellular structures.',
-    cost: { biomass: 100, knowledge: 100 }, // Reduced
+    cost: { biomass: 200, knowledge: 200 },
     chapter: 3,
     animationId: 'eukaryotic_evolution',
     effect: (gs) => {
@@ -156,7 +156,7 @@ export const UPGRADES: Upgrade[] = [
     id: 'cellular_specialization',
     title: 'Cellular Specialization',
     description: 'Cells learn to perform different functions, leading to multicellular organisms.',
-    cost: { biomass: 250, knowledge: 150 }, // Reduced
+    cost: { biomass: 500, knowledge: 300 },
     chapter: 3,
     effect: (gs) => ({ ...gs, complexity: gs.complexity + 100 }),
   },
@@ -164,7 +164,7 @@ export const UPGRADES: Upgrade[] = [
     id: 'collective_intelligence',
     title: 'Collective Intelligence',
     description: 'Individual minds connect, forming a single, more powerful consciousness.',
-    cost: { unity: 50, knowledge: 250 }, // Reduced
+    cost: { unity: 100, knowledge: 500 },
     chapter: 3,
     modifiesNodeTypeTarget: 'sentient_colony',
     animationId: 'collective_intelligence',

@@ -28,11 +28,10 @@ export interface VisualEffect {
     id: string;
     x: number;
     y: number;
-    type: 'flare' | 'spark' | 'ice-shatter' | 'assimilation';
+    type: 'flare' | 'spark' | 'ice-shatter';
     life: number;
     angle?: number;
     scale?: number;
-    color?: string; // Optional override
 }
 
 export interface GameNode {
@@ -53,7 +52,6 @@ export interface GameNode {
   maxIntegrity: number;
   currentIntegrity: number;
   integrityCooldown: number; // If > 0, node is recovering/invulnerable
-  hitCount?: number; // Track hits for progression logic
   
   // Status Effects
   frozenTimer?: number; // > 0 means frozen/iced

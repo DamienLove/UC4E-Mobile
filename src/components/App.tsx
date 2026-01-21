@@ -24,12 +24,12 @@ import { getNodeImagePrompt } from '../services/promptService';
 
 
 // Constants for game balance
-const BASE_KNOWLEDGE_RATE = 0.2; // Increased
-const STAR_ENERGY_RATE = 1.0; // Increased
-const LIFE_BIOMASS_RATE = 0.5; // Increased
+const BASE_KNOWLEDGE_RATE = 0.1;
+const STAR_ENERGY_RATE = 0.5;
+const LIFE_BIOMASS_RATE = 0.2;
 const COLLECTIVE_UNITY_RATE = 0.1;
 const DATA_GENERATION_RATE = 0.2;
-const STAR_ORB_SPAWN_CHANCE = 0.008; // Increased
+const STAR_ORB_SPAWN_CHANCE = 0.005;
 const PHAGE_SPAWN_CHANCE = 0.0001;
 const PHAGE_ATTRACTION = 0.01;
 const PHAGE_DRAIN_RATE = 0.5;
@@ -43,7 +43,7 @@ const BLOOM_SPAWN_MULTIPLIER = 20;
 const BLACK_HOLE_SPAWN_CHANCE = 0.00005;
 const BLACK_HOLE_DURATION_TICKS = 3600; 
 const BLACK_HOLE_PULL_STRENGTH = 100;
-const COMET_SPAWN_CHANCE = 0.002; 
+const COMET_SPAWN_CHANCE = 0.002; // Roughly once every 8-10 seconds at 60fps
 
 const AIM_ROTATION_SPEED = 0.05; 
 const POWER_OSCILLATION_SPEED = 1.5; 
@@ -328,7 +328,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
                       maxRadius: 100, life: 0,
                       color: "#a5f3fc"
                   });
-                  audioService.playSound('connection_bounce'); 
+                  audioService.playSound('connection_bounce'); // Use a placeholder until a specific sound is added
                   
                   break; // Only hit one thing
               }
@@ -391,7 +391,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
                   const dist = Math.hypot(playerNode!.x - dust.x, playerNode!.y - dust.y);
                   if (dist < playerNode!.radius + dust.size + 10) {
                       dustToRemove.add(dust.id);
-                      nextState.knowledge += 1.5; // Increased reward
+                      nextState.knowledge += 0.5; // Small reward
                   }
               });
               if (dustToRemove.size > 0) {
@@ -411,12 +411,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
                           if (node.type !== 'asteroid') {
                               node.currentIntegrity -= 1;
                           }
-                          node.integrityCooldown = 20; 
+                          node.integrityCooldown = 20; // Short invulnerability frames
                           
                           // BOUNCE PHYSICS
                           const angle = Math.atan2(playerNode.y - node.y, playerNode.x - node.x);
                           const speed = Math.hypot(playerNode.vx, playerNode.vy);
                           
+                          // Bumpers bounce harder
                           let bounceFactor = 0.85;
                           if (node.type === 'asteroid') bounceFactor = 1.3;
                           if (node.type === 'star') bounceFactor = 1.1;
@@ -426,37 +427,39 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
                           // Check Integrity Death
                           if (node.currentIntegrity <= 0 && node.type !== 'asteroid') {
-                              // ... (Keep existing death logic) ...
-                          } else {
-                              // --- STANDARD HIT / COMBO ---
-                              const isCombo = nextState.turnHitIds.has(node.id);
-                              
-                              if (node.type === 'star') { 
-                                  // --- STAR HIT ENHANCEMENTS ---
-                                  node.hitCount = (node.hitCount || 0) + 1;
+                              // --- DESTABILIZATION / ASSIMILATION ---
+                              if (node.type === 'star') {
+                                  // Solar Super-Charge (Supernova)
+                                  playerNode.vx *= 1.5; playerNode.vy *= 1.5;
                                   
-                                  const reward = 300; 
-                                  nextState.energy += reward; 
-                                  
-                                  // Solar Flare Visual
-                                  newVisualEffects.push({
-                                      id: `flare_${Date.now()}`, x: node.x, y: node.y, type: 'flare', life: 45, scale: 2.0, angle: Math.random() * Math.PI * 2
-                                  });
+                                  nextState.energy += 1000;
                                   newFloatingTexts.push({
                                       id: `ft_${Date.now()}`, x: node.x, y: node.y - 40,
-                                      text: "SOLAR SURGE", color: "#fde047", life: 50, vy: -1.5
+                                      text: "SUPERNOVA!", color: "#fde047", life: 80, vy: -1
                                   });
                                   
-                                  // PROGRESSION FAILSAFE
-                                  if ((node.hitCount || 0) >= 3) {
-                                      nextState.knowledge += 50; // Give knowledge to unblock upgrades
-                                      nextState.notifications.push("Stellar Insight: +50 Knowledge");
-                                      node.hitCount = 0; // Reset to allow repeated triggering if needed, or set to -100 to disable? Better to reset.
+                                  nextState.screenShake = { intensity: 30, duration: 30 };
+                                  newShockwaves.push({ id: `shock_${Date.now()}`, x: node.x, y: node.y, maxRadius: 500, life: 0 });
+                                  audioService.playSound('phage_spawn');
+                                  nextState.notifications.push("SOLAR SUPER-CHARGE!");
+                                  
+                                  // Reset Star
+                                  node.currentIntegrity = node.maxIntegrity;
+                                  node.integrityCooldown = 600; // 10 seconds downtime
+
+                                  // Spawn Eruption
+                                  for(let i=0; i<15; i++) {
+                                      const orbAngle = Math.random() * Math.PI * 2;
+                                      nextState.energyOrbs.push({
+                                          id: `erupt_${Date.now()}_${i}`,
+                                          x: node.x, y: node.y,
+                                          vx: Math.cos(orbAngle) * 9, vy: Math.sin(orbAngle) * 9,
+                                          radius: 8, value: 50
+                                      });
                                   }
-                              }
-                              else if (['rocky_planet', 'life_seed', 'sentient_colony'].includes(node.type)) { 
-                                  // --- PLANET ASSIMILATION ---
-                                  // Convert to satellite immediately
+                              } else if (node.type === 'rocky_planet' || node.type === 'life_seed' || node.type === 'sentient_colony') {
+                                  // Planet Assimilation
+                                  playerNode.vx *= 0.6; playerNode.vy *= 0.6; // Slow down a bit on capture
                                   
                                   nextState.nodes = nextState.nodes.filter(n => n.id !== node.id);
                                   mutableNodes = mutableNodes.filter(n => n.id !== node.id);
@@ -467,30 +470,73 @@ function gameReducer(state: GameState, action: GameAction): GameState {
                                       orbitSpeed: 0.02 + (Math.random() * 0.01), angle: Math.random() * Math.PI * 2,
                                   });
                                   
-                                  nextState.biomass += 100;
+                                  nextState.biomass += 200;
                                   newFloatingTexts.push({
                                       id: `ft_${Date.now()}`, x: node.x, y: node.y - 40,
                                       text: "ASSIMILATED", color: "#67e8f9", life: 60, vy: -1
                                   });
-                                  
-                                  // Assimilation Visual
-                                  newVisualEffects.push({
-                                      id: `assimilate_${Date.now()}`,
-                                      x: node.x, y: node.y,
-                                      type: 'assimilation', // New type
-                                      life: 30, scale: 3.0
-                                  });
 
-                                  nextState.screenShake = { intensity: 10, duration: 10 };
+                                  nextState.screenShake = { intensity: 15, duration: 15 };
+                                  newShockwaves.push({ id: `shock_${Date.now()}`, x: node.x, y: node.y, maxRadius: 150, life: 0 });
                                   audioService.playSound('connection_bounce');
                               }
-                              else {
-                                  // Asteroid
-                                  nextState.knowledge += 15;
-                                  audioService.playSound('pinball_bounce');
+                          } else {
+                              // --- STANDARD HIT / COMBO ---
+                              const isCombo = nextState.turnHitIds.has(node.id);
+                              
+                              let reward = 0;
+                              let color = "#fff";
+                              let rewardText = "";
+                              
+                              if (node.type === 'star') { 
+                                  reward = isCombo ? 200 : 100; 
+                                  color = "#fde047"; 
+                                  nextState.energy += reward; 
+                                  rewardText = isCombo ? `DOUBLE FLAME! +${reward}` : `FLARE +${reward}`;
+                                  
+                                  // Solar Flare Visual
+                                  newVisualEffects.push({
+                                      id: `flare_${Date.now()}`, x: node.x, y: node.y, type: 'flare', life: 30, scale: 1.5
+                                  });
+                              }
+                              else if (node.type === 'asteroid') { 
+                                  reward = isCombo ? 20 : 10; 
+                                  color = "#9ca3af"; 
+                                  nextState.knowledge += reward; 
+                                  rewardText = "BUMP"; 
+                              }
+                              else { 
+                                  reward = isCombo ? 100 : 50; 
+                                  color = "#86efac"; 
+                                  nextState.biomass += reward; 
+                                  rewardText = isCombo ? `CRACK! +${reward}` : `HIT +${reward}`;
                               }
                               
+                              // Add to combo tracker
                               nextState.turnHitIds.add(node.id);
+
+                              // Visuals
+                              newFloatingTexts.push({
+                                  id: `ft_${Date.now()}`, x: node.x, y: node.y - 30,
+                                  text: rewardText, color: color, life: 40, vy: -1.5
+                              });
+                              
+                              if (isCombo) {
+                                  // Sparks!
+                                  for(let k=0; k<8; k++) {
+                                      newVisualEffects.push({
+                                          id: `spark_${Date.now()}_${k}`, 
+                                          x: node.x + (Math.random()-0.5)*node.radius, 
+                                          y: node.y + (Math.random()-0.5)*node.radius, 
+                                          type: 'spark', life: 20, 
+                                          angle: Math.random() * Math.PI * 2
+                                      });
+                                  }
+                                  audioService.playSound('collect_orb_good');
+                              } else {
+                                  audioService.playSound(node.type === 'asteroid' ? 'pinball_bounce' : 'node_bounce');
+                              }
+                              
                               nextState.screenShake = { intensity: 5, duration: 5 };
                           }
                       }
@@ -521,8 +567,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       if (playerNode) {
           nextState.satellites = nextState.satellites.map(sat => {
               sat.angle += sat.orbitSpeed;
-              nextState.energy += 0.5; // Increased passive income
-              if (sat.type === 'life_seed') nextState.biomass += 0.5;
+              nextState.energy += 0.1; 
+              if (sat.type === 'life_seed') nextState.biomass += 0.1;
               return sat;
           });
       }
@@ -634,7 +680,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
                 y: node.y + (Math.random() - 0.5) * node.radius,
                 vx: (Math.random() - 0.5) * 1,
                 vy: (Math.random() - 0.5) * 1,
-                radius: 4, value: 20
+                radius: 4, value: 10
             });
         }
       });
@@ -817,6 +863,7 @@ const App: React.FC = () => {
   const [dimensions, setDimensions] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [energyPulse, setEnergyPulse] = useState(false);
   const [knowledgePulse, setKnowledgePulse] = useState(false);
+  const [canAffordUpgrade, setCanAffordUpgrade] = useState(false);
   const prevResources = useRef({ energy: gameState.energy, knowledge: gameState.knowledge });
 
   useEffect(() => {
@@ -826,6 +873,7 @@ const App: React.FC = () => {
   }, []);
   
   useEffect(() => {
+    // Pulse resource indicators on change
     if (gameState.energy > prevResources.current.energy) {
         setEnergyPulse(true); setTimeout(() => setEnergyPulse(false), 500);
     }
@@ -833,7 +881,27 @@ const App: React.FC = () => {
         setKnowledgePulse(true); setTimeout(() => setKnowledgePulse(false), 500);
     }
     prevResources.current = { energy: gameState.energy, knowledge: gameState.knowledge };
-  }, [gameState.energy, gameState.knowledge]);
+
+    // Check for "Ignite Star" availability (Chapter 0)
+    // Star Formation costs Energy: 50, Knowledge: 20
+    // Initial state is Energy: 50, Knowledge: 10
+    if (gameState.currentChapter === 0 && !gameState.unlockedUpgrades.has('star_formation')) {
+        if (gameState.energy >= 50 && gameState.knowledge >= 20) {
+            if (!canAffordUpgrade) {
+                // Trigger notification only once when threshold is met
+                dispatch({ type: 'DISMISS_NOTIFICATION', payload: { index: -1 } }); // Hack to clear old? No, just push.
+                // We don't have a direct 'PUSH_NOTIFICATION' action exposed in reducer for external calls easily without dispatch loop
+                // But we can rely on the visual cue of the upgrade button.
+                setCanAffordUpgrade(true);
+            }
+        } else {
+            setCanAffordUpgrade(false);
+        }
+    } else {
+        setCanAffordUpgrade(false);
+    }
+
+  }, [gameState.energy, gameState.knowledge, gameState.currentChapter, gameState.unlockedUpgrades, canAffordUpgrade]);
 
   // Use the new Camera Director enabled useWorldScale
   const { transform, handleWheel, handleMouseDown, handleMouseUp, handleMouseMove, screenToWorld: rawScreenToWorld, zoom, isPanningRef, setCameraTarget } = useWorldScale(1.5);
@@ -928,6 +996,14 @@ const App: React.FC = () => {
                           </div>
                       </div>
                   </div>
+                  {/* Dynamic Hint for First Star */}
+                  {canAffordUpgrade && (
+                      <div className="mt-2 text-center animate-bounce">
+                          <span className="bg-purple-900/80 text-white px-3 py-1 rounded-full text-xs border border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]">
+                              Ignition Ready! Open Upgrades ↓
+                          </span>
+                      </div>
+                  )}
               </div>
 
               {/* Right Menu */}
@@ -968,10 +1044,10 @@ const App: React.FC = () => {
 
                   <button 
                     onClick={() => setUpgradeModalOpen(true)} 
-                    className="neon-button w-24 h-24 flex flex-col items-center justify-center gap-2 bg-black/60"
+                    className={`neon-button w-24 h-24 flex flex-col items-center justify-center gap-2 bg-black/60 transition-all duration-300 ${canAffordUpgrade ? 'shadow-[0_0_30px_rgba(168,85,247,0.8)] border-purple-400 scale-110' : ''}`}
                   >
-                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
-                    <span className="text-[10px] tracking-widest">UPGRADE</span>
+                    <svg className={`w-8 h-8 ${canAffordUpgrade ? 'text-purple-300 animate-pulse' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+                    <span className={`text-[10px] tracking-widest ${canAffordUpgrade ? 'text-purple-300' : ''}`}>{canAffordUpgrade ? 'AVAILABLE' : 'UPGRADE'}</span>
                   </button>
               </div>
           </div>

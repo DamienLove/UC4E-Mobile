@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { generateMilestoneVideo } from '../services/geminiService';
 
 interface MilestoneVisualProps {
   milestoneId: string;
@@ -8,12 +9,25 @@ interface MilestoneVisualProps {
 
 const MILESTONE_DURATION: { [key: string]: number } = {
   default: 6000,
-  the_great_zoom_out: 14000, // A much longer, more cinematic duration
+  the_great_zoom_out: 14000,
   star_formation: 7000,
   planetary_accretion: 7000,
   quantum_computing: 7000,
   quantum_tunneling: 7000,
   basic_physics: 8000,
+};
+
+const MILESTONE_PROMPTS: { [key: string]: string } = {
+  basic_physics: "Abstract representation of the laws of physics, glowing mathematical formulas floating in a nebula.",
+  star_formation: "A massive star igniting for the first time, shockwaves of light and gas expanding.",
+  planetary_accretion: "Molten rocks colliding and fusing to form a glowing planetoid in space.",
+  eukaryotic_evolution: "Microscopic view of cells merging and evolving into complex life forms, glowing bioluminescence.",
+  collective_intelligence: "A planet covered in a neural network of glowing light, pulse of a global mind.",
+  quantum_computing: "A futuristic quantum computer core, floating in void, glowing with cyan and magenta qubits.",
+  quantum_tunneling: "A spaceship distorting space and disappearing into a wormhole, warp drive effect.",
+  the_great_zoom_out: "The universe zooming out to reveal it is a network of neurons.",
+  spark_of_life: "A spark of lightning hitting a primordial soup, creating glowing DNA strands.",
+  panspermia: "Comets carrying glowing seeds of life crashing into a barren planet.",
 };
 
 const getVisuals = (imageUrl?: string): { [key: string]: React.ReactNode } => ({
@@ -151,29 +165,106 @@ const MilestoneVisual: React.FC<MilestoneVisualProps> = ({ milestoneId, imageUrl
   const visuals = getVisuals(imageUrl);
   const visualContent = visuals[milestoneId];
   const duration = MILESTONE_DURATION[milestoneId] || MILESTONE_DURATION.default;
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [statusText, setStatusText] = useState("Initializing Simulation...");
 
   useEffect(() => {
     // If an unknown milestone ID is passed, complete immediately to avoid getting stuck.
-    if (!visualContent) {
+    if (!visualContent && !MILESTONE_PROMPTS[milestoneId]) {
       onComplete();
       return;
     }
 
-    const timer = setTimeout(onComplete, duration);
-    return () => clearTimeout(timer);
-  }, [visualContent, onComplete, duration]);
+    let isMounted = true;
+    
+    const loadVideo = async () => {
+        const prompt = MILESTONE_PROMPTS[milestoneId];
+        if (prompt) {
+            // Check cache first
+            const cachedUrl = localStorage.getItem(`milestone_video_${milestoneId}`);
+            if (cachedUrl) {
+                console.log("Using cached milestone video for", milestoneId);
+                setVideoUrl(cachedUrl);
+                setIsLoading(false);
+                return;
+            }
 
-  if (!visualContent) {
+            setStatusText("Generating Cinematic Visualization (Veo)...");
+            const url = await generateMilestoneVideo(prompt);
+            
+            if (isMounted) {
+                if (url) {
+                    try {
+                        localStorage.setItem(`milestone_video_${milestoneId}`, url);
+                        setVideoUrl(url);
+                    } catch (e) {
+                        console.warn("Could not cache video URL", e);
+                    }
+                }
+                setIsLoading(false);
+            }
+        } else {
+            if (isMounted) setIsLoading(false);
+        }
+    };
+
+    // Only load video if we have a prompt for it, otherwise fallback to CSS animation
+    if (MILESTONE_PROMPTS[milestoneId]) {
+        loadVideo();
+    } else {
+        setIsLoading(false);
+    }
+
+    // Auto-advance fallback if no video is loading
+    let timer: ReturnType<typeof setTimeout>;
+    if (!MILESTONE_PROMPTS[milestoneId]) {
+         timer = setTimeout(onComplete, duration);
+    }
+
+    return () => { 
+        isMounted = false;
+        if(timer) clearTimeout(timer); 
+    };
+  }, [milestoneId, visualContent, onComplete, duration]);
+
+  // Specific handler for when video ends
+  const handleVideoEnded = () => {
+      onComplete();
+  };
+
+  if (!visualContent && !videoUrl && !isLoading) {
     return null;
   }
 
   return (
-    <div className="milestone-container" style={{ animationDuration: `1s, 1s`, animationDelay: `0s, ${duration/1000 -1}s`}}>
-      <div className="milestone-explosion-flash" />
-      {visualContent}
-      <button className="milestone-skip-button" onClick={onComplete}>
-        Skip
-      </button>
+    <div className="milestone-container flex flex-col items-center justify-center bg-black/95 text-white z-[200]">
+      {isLoading ? (
+          <div className="flex flex-col items-center gap-4">
+              <div className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-cyan-300 font-mono animate-pulse">{statusText}</p>
+              <button className="text-gray-500 text-sm hover:text-white mt-4" onClick={onComplete}>Skip Generation</button>
+          </div>
+      ) : videoUrl ? (
+          <div className="relative w-full h-full flex items-center justify-center bg-black">
+              <video 
+                src={videoUrl} 
+                autoPlay 
+                onEnded={handleVideoEnded} 
+                className="max-w-full max-h-full object-contain"
+                controls={false}
+              />
+              <button className="absolute bottom-8 right-8 neon-button px-6 py-2 rounded" onClick={onComplete}>Continue</button>
+          </div>
+      ) : (
+          <div className="milestone-container" style={{ animationDuration: `1s, 1s`, animationDelay: `0s, ${duration/1000 -1}s`}}>
+            <div className="milestone-explosion-flash" />
+            {visualContent}
+            <button className="milestone-skip-button" onClick={onComplete}>
+                Skip
+            </button>
+          </div>
+      )}
     </div>
   );
 };
